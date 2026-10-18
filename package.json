@@ -1,0 +1,14 @@
+{
+  "name": "imposter-game",
+  "version": "1.0.0",
+  "private": true,
+  "type": "module",
+  "description": "Multiplayer impostor word party game",
+  "scripts": {
+    "start": "node server.js",
+    "test": "node test/e2e.mjs"
+  },
+  "dependencies": {
+    "ws": "^8.19.2"
+  }
+}

@@ -1,6 +1,7 @@
-// End-to-end test for the Impostor Word Game (PRD v1.0).
-// Plays real rounds over WebSockets: modes, clue rounds, host-driven phase flow,
-// elimination + last guess, host controls, custom word banks, and Pass & Play.
+// End-to-end test for the Impostor Word Game.
+// Plays real rounds over WebSockets: modes, discussion -> vote flow (no typed clues),
+// host-driven phase flow, elimination + last guess, host controls, custom word banks,
+// and Pass & Play.
 // Run: npm test
 import WebSocket from 'ws';
 
@@ -22,7 +23,6 @@ class Client {
     this.id = null;
     this.code = null;
     this.errors = [];
-    this.sentClues = new Set();
   }
   connect() {
     return new Promise((resolve, reject) => {
@@ -52,35 +52,6 @@ class Client {
 
 const sleep = (ms) => new Promise((r) => setTimeout(r, ms));
 
-let cheatChecked = false;
-
-// Every connected client answers its own clue turn as soon as it comes up.
-// `cheat` (optional) tries saying the actual word once, on the first crew turn.
-async function clueRound(devices, wordFor, host, cheat) {
-  for (const c of devices) c.sentClues.clear();
-  const deadline = Date.now() + 15000;
-  while (host.view.phase === 'clues') {
-    if (Date.now() > deadline) throw new Error('clue round did not finish');
-    for (const c of devices) {
-      const v = c.view;
-      if (!v || v.phase !== 'clues' || v.turnId !== c.id) continue;
-      const key = v.clues.length;
-      if (c.sentClues.has(key)) continue;
-      if (cheat && !cheatChecked && !v.youAreImpostor) {
-        cheatChecked = true;
-        c.cheatTried = true;
-        c.send({ t: 'clue', word: v.yourWord });
-        await sleep(90);
-        const last = c.errors[c.errors.length - 1] || '';
-        ok(/cannot say the actual word/.test(last), `crew cannot say the secret word ("${last}")`);
-      }
-      c.sentClues.add(key);
-      c.send({ t: 'clue', word: wordFor(c, v) });
-    }
-    await sleep(25);
-  }
-}
-
 const start = Date.now();
 const log = (s) => console.log(`\n[${((Date.now() - start) / 1000).toFixed(1)}s] ${s}`);
 
@@ -100,7 +71,8 @@ try {
   ok(A.view.limits.max === 20 && A.view.limits.min === 3, `player limits 3–20 (${JSON.stringify(A.view.limits)})`);
   ok(A.view.categories.length >= 10 && A.view.categories.every((c) => c.difficulty && c.count > 0), 'categories ship with difficulty tags');
   ok(A.view.settings.mode === 'mysterious' && A.view.settings.lastGuess === true && !('turnTimer' in A.view.settings) && !('discussTimer' in A.view.settings), 'PRD default settings (no timers)');
-  ok(!('passes' in A.view.settings) && !('passOptions' in A.view), 'clue passes setting is gone (always one pass)');
+  ok(!('passes' in A.view.settings) && !('passOptions' in A.view), 'no clue-pass settings (discussion only)');
+  ok(Array.isArray(A.view.clues) && A.view.clues.length === 0 && A.view.turnId == null, 'no typed clue phase');
 
   group('host configuration');
   A.send({
@@ -125,7 +97,7 @@ try {
   await A.until(() => A.view.settings.category === 'custom', 4000, 'custom selected');
 
   // --------------------------------------------------------------- round one
-  log('round 1 — classic mode, one impostor, one clue pass');
+  log('round 1 — classic mode, one impostor, discuss then vote');
   A.send({ t: 'start' });
   await A.until(() => A.view.phase === 'reveal', 4000, 'reveal');
   const imp = clients.find((c) => c.view.youAreImpostor);
@@ -138,22 +110,16 @@ try {
   ok(B.view.youAreImpostor === (B.id === imp.id), 'roles are per-player (never leaked to the room)');
 
   for (const c of clients) c.send({ t: 'ready' });
-  await A.until(() => A.view.phase === 'clues', 5000, 'clues');
-  ok(Boolean(A.view.turnId), 'a clue turn is assigned');
+  await A.until(() => A.view.phase === 'vote', 5000, 'voting opens right after reveal');
+  ok(A.view.turnId == null && A.view.clues.length === 0, 'no clue turn — straight to discussion/vote');
 
-  group('clue round');
+  group('typed clues are off');
   B.errors.length = 0;
-  const notTurn = clients.find((c) => c.view.turnId !== c.id);
-  notTurn.send({ t: 'clue', word: 'zzz' });
-  await notTurn.until(() => notTurn.errors.length > 0, 3000, 'wrong-turn rejection');
-  ok(/Wait your turn/.test(notTurn.errors[0]), 'clue out of turn rejected');
+  B.send({ t: 'clue', word: 'zzz' });
+  await B.until(() => B.errors.length > 0, 3000, 'clue rejected');
+  ok(/Typed clues are off/.test(B.errors[0]), 'typed clue rejected with discussion hint');
 
   const crewWord = crew[0].view.yourWord;
-  crew[0].errors.length = 0;
-
-  await clueRound(clients, () => 'hintword', A, true);
-  ok(A.view.phase === 'vote', 'voting opens right after the pass');
-  ok(A.view.clues.length === 4, `4 clues collected (${A.view.clues.map((c) => c.text).join(', ')})`);
 
   group('voting — everyone skips, then a skip-vote continues the round');
   for (const c of clients) c.send({ t: 'vote', target: 'skip' });
@@ -161,12 +127,10 @@ try {
   ok(A.view.voteCounts.skip === 4, 'vote counts revealed at tally');
   ok(A.view.eliminatedNow === null, 'no elimination on a skip vote');
   A.send({ t: 'continue' });
-  await A.until(() => A.view.phase === 'clues', 5000, 'clues again');
-  ok(A.view.clues.length === 0, 'a fresh clue round starts after a tied/skipped vote');
+  await A.until(() => A.view.phase === 'vote', 5000, 'vote again after skip');
+  ok(A.view.clues.length === 0, 'still no typed clues after a tied/skipped vote');
 
   group('voting — impostor voted out, then steals with the last guess');
-  await clueRound(clients, () => 'anotherhint', A);
-  await A.until(() => A.view.phase === 'vote', 8000, 'vote 2');
   for (const c of clients) c.send({ t: 'vote', target: c.id === imp.id ? crew[0].id : imp.id });
   await A.until(() => A.view.phase === 'tally', 4000, 'tally 2');
   ok(A.view.eliminatedNow && A.view.eliminatedNow.id === imp.id && A.view.eliminatedNow.isImpostor, 'eliminated player\'s identity is revealed');
@@ -195,9 +159,7 @@ try {
   // the delta below rather than a hardcoded total
   const winsBefore = new Map(clients.map((c) => [c.id, c.view.players.find((p) => p.id === c.id).wins]));
   for (const c of clients) c.send({ t: 'ready' });
-  await A.until(() => A.view.phase === 'clues', 5000, 'round 2 clues');
-  await clueRound(clients, () => 'clue2', A);
-  await A.until(() => A.view.phase === 'vote', 8000, 'round 2 vote');
+  await A.until(() => A.view.phase === 'vote', 5000, 'round 2 vote');
   for (const c of clients) c.send({ t: 'vote', target: c.id === imp2.id ? crew2[0].id : imp2.id });
   await A.until(() => A.view.phase === 'tally', 4000, 'round 2 tally');
   A.send({ t: 'continue' });
@@ -233,9 +195,7 @@ try {
   ok(imps.length === 2, 'two impostors dealt');
   ok(A.view.impostorCount == null, 'impostor count stays hidden mid-round');
   for (const c of clients) c.send({ t: 'ready' });
-  await A.until(() => A.view.phase === 'clues', 5000, 'clues (2 imps)');
-  await clueRound(clients, () => 'sneak', A);
-  await A.until(() => A.view.phase === 'vote', 8000, 'vote (2 imps)');
+  await A.until(() => A.view.phase === 'vote', 5000, 'vote (2 imps)');
   const crewA = clients.filter((c) => !c.view.youAreImpostor);
   // host closes voting early: 3 of 4 vote, then advance straight to the tally
   imps[0].send({ t: 'vote', target: crewA[0].id });
@@ -246,7 +206,7 @@ try {
   ok(imps[1].view.myVote == null, 'the missing fourth vote never landed');
   ok(A.view.eliminatedNow && A.view.eliminatedNow.isImpostor, 'one impostor eliminated');
   A.send({ t: 'continue' });
-  await A.until(() => A.view.phase === 'clues', 5000, 'round continues with one impostor left');
+  await A.until(() => A.view.phase === 'vote', 5000, 'round continues with one impostor left');
   ok(true, 'surviving impostor keeps the game going');
 
   // ------------------------------------------------------------- reconnect
@@ -291,7 +251,6 @@ try {
     await device.until(() => device.view.activeSeat === i, 3000, `seat ${i}`);
     seatWords.push(device.view.yourWord);
   }
-  const soloWords = seatWords.filter(Boolean);
   ok(new Set(seatWords).size === 2, `each seat sees only its own card (${seatWords.join(' / ')})`);
   ok(typeof device.view.yourCategory === 'string' && device.view.yourCategory.length > 0, `solo deals from a category (${device.view.yourCategory})`);
 
@@ -300,24 +259,8 @@ try {
     await device.until(() => device.view.activeSeat === i, 3000, `seat ready ${i}`);
     device.send({ t: 'ready' });
   }
-  await device.until(() => device.view.phase === 'clues', 5000, 'solo clues');
-  const soloDeadline = Date.now() + 15000;
-  const soloSent = new Set();
-  while (device.view.phase === 'clues') {
-    if (Date.now() > soloDeadline) throw new Error('solo clue round stuck');
-    const idx = device.view.players.findIndex((p) => p.id === device.view.turnId);
-    if (idx === -1) break;
-    const key = device.view.clues.length;
-    device.send({ t: 'seat', index: idx });
-    await device.until(() => device.view.activeSeat === idx, 3000, `solo turn ${idx}`);
-    if (!soloSent.has(key)) {
-      soloSent.add(key);
-      device.send({ t: 'clue', word: `table${idx}` });
-    }
-    await sleep(60);
-  }
-  ok(device.view.phase === 'vote', 'solo voting starts after every seat has given a clue');
-  ok(device.view.clues.length === 3, 'three clues recorded');
+  await device.until(() => device.view.phase === 'vote', 5000, 'solo voting starts right after reveal');
+  ok(device.view.clues.length === 0, 'no typed clues in solo either');
   const impSeatIdx = seatWords.findIndex((w, i) => w !== seatWords[(i + 1) % 3] && w !== seatWords[(i + 2) % 3]);
   for (let i = 0; i < 3; i++) {
     if (i === impSeatIdx) continue;

@@ -10,7 +10,6 @@
   let draft = {
     name: (me && me.name) || '',
     code: (me && me.code) || '',
-    clue: '',
     chat: '',
     custom: '',
     seats: '',
@@ -22,7 +21,7 @@
   let lastPhase = '';
   let pendingResume = Boolean(me && me.code);
   let retryDelay = 400;
-  let soloStage = 'handoff'; // handoff | card | clue | ballot
+  let soloStage = 'handoff'; // handoff | card | ballot
   let customTimer = null;
   let toastTimer = null;
   let enterTimer = null;
@@ -164,8 +163,7 @@
   const PHASE_WORDS = {
     lobby: 'Lobby. Waiting for the host to start.',
     reveal: 'Your card is ready. Press and hold to see your word.',
-    clues: 'Clue round. One word per player, in turn order.',
-    vote: 'Voting is open. Check the clues, talk it out, and pick the faker.',
+    vote: 'Voting is open. Talk it out, and pick the faker.',
     tally: 'Votes are in.',
     guess: 'The impostor gets one guess at the word.',
     end: 'The round is over.',
@@ -202,7 +200,6 @@
         enterTimer = setTimeout(() => app.classList.remove('enter'), 700);
         if (m.phase === 'end') confetti();
       }
-      draft.clue = '';
       render();
       return;
     }
@@ -251,15 +248,6 @@
 
   function statusBar(label, extra) {
     return `<div class="turnbar"><span>${label}</span>${extra ? `<span class="clock">${extra}</span>` : ''}</div>`;
-  }
-
-  function clueList() {
-    if (!view.clues.length) return '<div class="status muted">No clues yet.</div>';
-    return `<div class="clues">${view.clues.map((c) => `
-        <div class="clue ${c.id === view.me ? 'mine' : ''}">
-          <span class="who">${esc(c.by)}</span>
-          <span class="w">${esc(c.text)}</span>
-        </div>`).join('')}</div>`;
   }
 
   function chatBox() {
@@ -321,7 +309,7 @@
         <summary style="cursor:pointer;font-weight:700">How to play</summary>
         <p class="muted">
           1. Everyone gets a <b>secret word</b> — except the impostor, who secretly gets a different one.<br/>
-          2. Take turns giving a <b>one-word clue</b> about your word.<br/>
+          2. <b>Discuss</b> together — ask questions, defend yourself.<br/>
           3. <b>Vote</b> out who you think is faking it.<br/>
           4. If the impostor survives the vote, they get <b>one guess</b> at the real word.<br/>
           3–20 players · phone or one shared device.
@@ -346,7 +334,7 @@
         <summary style="cursor:pointer;font-weight:700">How to play</summary>
         <p class="muted">
           1. Everyone gets a <b>secret word</b> — except the impostor, who secretly gets a different one.<br/>
-          2. Take turns giving a <b>one-word clue</b> about your word.<br/>
+          2. <b>Discuss</b> together — ask questions, defend yourself.<br/>
           3. <b>Vote</b> out who you think is faking it.<br/>
           4. If the impostor survives the vote, they get <b>one guess</b> at the real word.<br/>
           3–20 players · separate phones or one shared device.
@@ -445,7 +433,7 @@
       ${scoreboard(true)}
       ${chatBox()}
       <details class="card"><summary style="cursor:pointer;font-weight:700">How to play</summary>
-        <p class="muted">One-word clues, then debate, then vote. The impostor blends in; if they survive, they get one guess at the word.</p>
+        <p class="muted">Discuss, then vote. The impostor blends in; if they survive, they get one guess at the word.</p>
       </details>
       <button type="button" class="ghost block" data-act="leave">Leave room</button>`;
   }
@@ -453,21 +441,21 @@
   function screenReveal() {
     if (view.solo) {
       const nextIdx = view.players.findIndex((p) => !p.ready);
-      if (nextIdx === -1) return soloWaiting('Everyone has seen their card.', 'The clue round starts in a moment…');
+      if (nextIdx === -1) return soloWaiting('Everyone has seen their card.', 'Voting starts in a moment…');
       const seat = view.players[nextIdx];
       if (soloStage === 'handoff') return handoffSeat(seat, 'Hand the device over', `Pass to ${seat.name}`);
       wantSeat(nextIdx);
       return `
         ${holdCard(view.yourWord, view.yourCategory, view.youAreImpostor, view.youAreImpostor
           ? 'Keep a straight face. Nobody knows you are faking it.'
-          : 'Give a one-word clue that proves you know it.')}
+          : 'Remember it — you will discuss it together.')}
         <div class="spacer"></div>
         <button type="button" class="primary block big" data-act="ready">Hide &amp; pass on</button>`;
     }
     return `
       ${holdCard(view.yourWord, view.yourCategory, view.youAreImpostor, view.youAreImpostor
         ? 'You have a different word from the crew. Act like you know theirs — then, if you survive the vote, guess the real word to win.'
-        : 'Give a one-word clue that proves you know it — without saying it.')}
+        : 'Remember it — discuss without saying it outright.')}
       <div class="spacer"></div>
       ${view.ready
         ? `<div class="status">✅ You're in. Waiting for <b>${view.players.filter((p) => p.ready).length}/${view.players.filter((p) => p.connected).length}</b> players…</div>`
@@ -478,50 +466,6 @@
   function soloWaiting(title, sub) {
     return `
       <div class="status" style="padding-top:40px"><b>${esc(title)}</b><br/><span class="muted">${esc(sub || '')}</span></div>`;
-  }
-
-  function screenClues() {
-    if (view.solo) {
-      const idx = view.players.findIndex((p) => p.id === view.turnId);
-      if (idx === -1) return `<div class="card">${clueList()}</div>`;
-      const seat = view.players[idx];
-      if (soloStage === 'handoff') {
-        return `
-          ${statusBar('Whose turn?')}
-          ${handoffSeat(seat, 'Time for a clue', `Pass to ${seat.name}`)}`;
-      }
-      wantSeat(idx);
-      return `          ${statusBar(`${esc(seat.name)}'s clue`)}
-        <div class="card">
-          <form data-form="clue">
-            <label for="clueIn">One word about <b>${esc(view.yourWord || '')}</b> (not the word itself)</label>
-            <input id="clueIn" type="text" data-k="clue" maxlength="24" autocomplete="off" placeholder="type the clue…" value="${esc(draft.clue)}" />
-            <div class="spacer"></div>
-            <button type="submit" class="primary block big">Give clue</button>
-          </form>
-        </div>
-        <div class="card"><h3>Clues so far</h3>${clueList()}</div>`;
-    }
-
-    const myTurn = view.turnId === view.me;
-    const iGave = view.clues.some((c) => c.id === view.me);
-    const alive = view.players.filter((p) => p.alive && p.connected);
-    const upNext = alive.find((p) => !view.clues.some((c) => c.id === p.id));
-    return `
-      ${statusBar(myTurn ? '<span class="mine">your turn</span>' : `waiting for <span style="color:var(--accent)">${esc(upNext ? upNext.name : '…')}</span>`)}
-      <div class="card">
-        ${myTurn
-          ? `<form data-form="clue">
-               <label for="clueIn">One word about <b>${esc(view.yourWord || '')}</b> (not the word itself)</label>
-               <input id="clueIn" type="text" data-k="clue" maxlength="24" autocomplete="off" autocapitalize="off" placeholder="type your clue…" value="${esc(draft.clue)}" />
-               <div class="spacer"></div>
-               <button type="submit" class="primary block big">Give clue</button>
-             </form>`
-          : iGave
-            ? `<div class="status">Your clue is in: <b style="color:var(--crew)">${esc((view.clues.filter((c) => c.id === view.me).pop() || {}).text)}</b><br/><span class="muted">Listen to the others…</span></div>`
-            : `<div class="status">Waiting for your turn.<br/><span class="muted">Clues go in turn order — everyone hears each one.</span></div>`}
-      </div>
-      <div class="card"><h3>Clues so far</h3>${clueList()}</div>`;
   }
 
   function ballot() {
@@ -554,7 +498,7 @@
         return `${statusBar(`Voting — ${votedCount}/${voters.length} done`)}${handoffSeat(nextVoter, 'Time to vote', `Pass to ${nextVoter.name}`)}`;
       }
       wantSeat(idx);
-      return `${statusBar(`${esc(nextVoter.name)} is voting`)}${ballot()}<div class="card"><h3>Clues</h3>${clueList()}</div>`;
+      return `${statusBar(`${esc(nextVoter.name)} is voting`)}${ballot()}`;
     }
     if (view.myVote) {
       return `
@@ -562,15 +506,13 @@
         <div class="status">You voted for <b>${view.myVote === 'skip' ? 'no one (skip)' : esc(nameOf(view.myVote))}</b>.<br/>
         <span class="muted">Waiting for ${voters.length - votedCount} more…</span></div>
         ${playerList(false)}
-        <div class="card"><h3>Clues</h3>${clueList()}</div>
         ${chatBox()}
         ${!view.solo && view.isHost ? '<div class="spacer"></div><button type="button" class="ghost block" data-act="advance">Close voting &amp; reveal</button>' : ''}`;
     }
     return `
       ${statusBar('🗳 Who is the impostor?', `${votedCount}/${voters.length}`)}
       ${ballot()}
-      <div class="muted center">One vote each. Check the clues, talk it out, choose carefully.</div>
-      <div class="card"><h3>Clues</h3>${clueList()}</div>
+      <div class="muted center">One vote each. Talk it out, choose carefully.</div>
       ${chatBox()}
       ${!view.solo && view.isHost ? '<div class="spacer"></div><button type="button" class="ghost block" data-act="advance">Close voting &amp; reveal</button>' : ''}`;
   }
@@ -650,7 +592,6 @@
             <span class="badge ${p.impostor ? 'imp' : 'crew'}" style="margin-left:auto">${p.impostor ? 'IMPOSTOR' : 'crew'}</span>
           </div>`).join('')}
       </div>
-      <div class="card"><h3>Clues that were given</h3>${clueList()}</div>
       ${scoreboard(false)}
       ${view.isHost ? `<button type="button" class="primary block big" data-act="again">Play again</button>`
         : `<div class="status muted">${view.solo ? '' : 'Waiting for the host to start another round…'}</div>`}
@@ -667,7 +608,7 @@
     switch (view.phase) {
       case 'lobby': return view.solo ? screenSoloLobby() : screenLobby();
       case 'reveal': return screenReveal();
-      case 'clues': return screenClues();
+      case 'clues': return screenVote();
       case 'vote': return screenVote();
       case 'tally': return screenTally();
       case 'guess': return screenGuess();
@@ -753,13 +694,7 @@
   document.addEventListener('submit', (e) => {
     const form = e.target;
     e.preventDefault();
-    if (form.dataset.form === 'clue') {
-      const w = readInput('clue').trim();
-      if (!w) return toast('Type a clue first.');
-      send({ t: 'clue', word: w });
-      draft.clue = '';
-      soloStage = 'handoff';
-    } else if (form.dataset.form === 'chat') {
+    if (form.dataset.form === 'chat') {
       const t = readInput('chat').trim();
       if (!t) return;
       send({ t: 'chat', text: t });
@@ -849,8 +784,7 @@
       case 'continue': send({ t: 'continue' }); break;
       case 'advance': send({ t: 'advance' }); break;
       case 'again': send({ t: 'again' }); break;
-      case 'seat-ok': soloStage = soloStage === 'handoff' && view.phase === 'clues' ? 'clue'
-        : soloStage === 'handoff' && view.phase === 'vote' ? 'ballot' : 'card';
+      case 'seat-ok': soloStage = soloStage === 'handoff' && view.phase === 'vote' ? 'ballot' : 'card';
         render(true);
         break;
       case 'set': {

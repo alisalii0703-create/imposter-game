@@ -1,5 +1,5 @@
 // Impostor PWA service worker — app shell cache, network-first so updates land fast.
-const CACHE = 'imposter-v3';
+const CACHE = 'imposter-v4';
 const SHELL = ['/', '/style.css', '/app.js', '/manifest.webmanifest', '/icon-192.png', '/icon-512.png'];
 
 self.addEventListener('install', (e) => {

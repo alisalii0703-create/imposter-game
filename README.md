@@ -4,7 +4,7 @@ A real-time, multiplayer **word party game** for 3–20 players — the impostor
 now a installable PWA.
 
 Everyone gets the **same secret word**… except one or more players, who secretly
-get a **different word from the same category**. Give one-word clues, argue about
+get a **different word from the same category**. Discuss together, argue about
 who doesn't belong, and vote them out. If an impostor survives the vote, they get
 one guess at the real word to steal the win.
 
@@ -33,10 +33,9 @@ Set `PORT` to serve on a different port.
 
 1. **Deal** — crew all get the same word; each impostor gets a different one from
    the same category (press & hold to peek at your card).
-2. **Clues** — one word per player, in turn order, no clock.
-   Crew may not say the word itself.
-3. **Vote** — one vote each (the host can close voting early). The clues stay
-   on screen and chat stays open while you decide. Most votes is eliminated;
+2. **Discuss** — talk it out in person (or in chat).
+3. **Vote** — one vote each (the host can close voting early). Chat stays open
+   while you decide. Most votes is eliminated;
    ties and skips mean nobody is.
 4. **Last guess** *(house rule, on by default)* — an impostor who is voted out gets
    one shot at the real word. Correct guess steals the win.

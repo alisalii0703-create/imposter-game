@@ -15,7 +15,7 @@ const SOLO_MAX_SEATS = 20;
 const MAX_IMPOSTORS = 3;
 const MODES = ['classic', 'mysterious', 'chaotic'];
 const SEAT_GRACE_MS = 45_000;
-const IN_PLAY = ['reveal', 'clues', 'vote', 'tally', 'guess'];
+const IN_PLAY = ['reveal', 'vote', 'tally', 'guess'];
 
 // ---------------------------------------------------------------- word banks
 const CATEGORIES = {
@@ -165,45 +165,23 @@ function deal(room) {
   setPhase(room, 'reveal');
 }
 
-// ---------------------------------------------------------------- clue phase
+// ------------------------------------------------- discussion -> voting (no typed clues)
+// Clue phase removed: players discuss out loud, then vote.
 function startPass(room) {
   room.clues = [];
-  const order = room.round.order.filter((id) => {
-    const p = byId(room, id);
-    return p && p.alive && (room.solo || p.connected);
-  });
-  room.passOrder = order;
+  room.passOrder = null;
   room.turn = 0;
-  if (!order.length) return endGame(room, 'crew', 'Everyone left the table.');
-  setPhase(room, 'clues');
+  const alive = (room.solo ? room.players : connected(room)).filter((p) => p.alive);
+  if (!alive.length) return endGame(room, 'crew', 'Everyone left the table.');
+  return openVoting(room);
 }
 
 function currentTurn(room) {
-  if (room.phase !== 'clues' || !room.passOrder) return null;
-  const id = room.passOrder[room.turn];
-  return id ? byId(room, id) : null;
+  return null;
 }
 
-function advanceTurn(room) {
-  room.turn += 1;
-  if (room.passOrder && room.turn >= room.passOrder.length) return openVoting(room);
-  broadcast(room);
-}
-
-function submitClue(room, actor, raw) {
-  const text = String(raw || '').trim().replace(/\s+/g, ' ');
-  if (room.phase !== 'clues') return send(room.device || actor, { t: 'error', msg: 'Not clue time yet.' });
-  const cur = currentTurn(room);
-  if (!cur || cur.id !== actor.id) return send(room.device || actor, { t: 'error', msg: 'Wait your turn.' });
-  if (!text) return send(room.device || actor, { t: 'error', msg: 'Type a clue.' });
-  if (text.split(' ').length > 3) return send(room.device || actor, { t: 'error', msg: 'Keep it to 3 words or fewer.' });
-  if (text.length > 24) return send(room.device || actor, { t: 'error', msg: 'Too long (24 chars max).' });
-  if (!actor.isImpostor && room.round && text.toLowerCase() === String(room.round.word).toLowerCase()) {
-    return send(room.device || actor, { t: 'error', msg: 'You cannot say the actual word!' });
-  }
-  room.clues.push({ by: actor.name, id: actor.id, text });
-  actor.clueGiven = true;
-  advanceTurn(room);
+function submitClue(room, actor) {
+  return send(room.device || actor, { t: 'error', msg: 'Typed clues are off — discuss together instead.' });
 }
 
 // ----------------------------------------------------------- voting & reveal
@@ -262,7 +240,7 @@ function resolveTally(room) {
     return endGame(room, 'crew', 'Every impostor was voted out.');
   }
   if (imps.length >= crew.length) return endGame(room, 'imp', 'The impostors have taken over.');
-  startPass(room);
+  openVoting(room);
 }
 
 function beginGuess(room, impostor) {
@@ -381,7 +359,7 @@ const server = http.createServer((req, res) => {
       return res.end('not found');
     }
     const headers = { 'content-type': MIME[path.extname(filePath)] || 'application/octet-stream' };
-    if (filePath.endsWith('sw.js')) headers['cache-control'] = 'no-cache';
+    if (filePath.endsWith('sw.js') || filePath.endsWith('app.js') || filePath.endsWith('index.html')) headers['cache-control'] = 'no-cache';
     res.writeHead(200, headers);
     res.end(data);
   });
@@ -527,7 +505,7 @@ function joinRoom(player, msg) {
   if (connected(room).length >= Number(room.settings.maxPlayers)) {
     return send(player, { t: 'error', msg: 'That room is full.' });
   }
-  if (['reveal', 'clues', 'vote'].includes(room.phase)) {
+  if (['reveal', 'vote'].includes(room.phase)) {
     return send(player, { t: 'error', msg: 'A round is in progress — try again after.' });
   }
   if (player.room) removePlayer(player);
@@ -750,9 +728,6 @@ function removePlayer(player, silent) {
     }
     if (room.phase === 'reveal') {
       if ((room.solo ? room.players : connected(room)).every((p) => p.ready)) startPass(room);
-    } else if (room.phase === 'clues') {
-      if (!currentTurn(room)) openVoting(room);
-      else if (room.passOrder[room.turn] === player.id) advanceTurn(room);
     } else if (room.phase === 'vote') {
       const voters = (room.solo ? room.players : connected(room)).filter((p) => p.alive);
       if (voters.every((p) => p.voted)) tally(room);

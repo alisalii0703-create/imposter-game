@@ -6,6 +6,7 @@
 import WebSocket from 'ws';
 
 const URL = process.env.WS_URL || 'ws://localhost:5173/ws';
+const BASE = URL.replace(/^ws/, 'http').replace(/\/ws$/, '');
 let failures = 0;
 let checks = 0;
 
@@ -87,6 +88,63 @@ try {
   B.send({ t: 'settings', mode: 'chaotic' });
   await B.until(() => B.errors.length > 0, 3000, 'non-host rejected');
   ok(/Only the host/.test(B.errors[0]) && A.view.settings.mode === 'classic', 'non-host cannot change settings');
+
+  // -------------------------------------------------------------- pro tier
+  group('pro tier — locked by default');
+  const { grant, revoke, removeKey, normalizeKey } = await import('../lib/pro.js');
+  const testKey = normalizeKey('IMPTESTPROKEY01');
+  const proPacks = A.view.categories.filter((c) => c.tier === 'pro');
+  ok(proPacks.length >= 10, `${proPacks.length} niche + fun packs ship behind Pro`);
+  ok(proPacks.every((c) => c.locked), 'every Pro pack starts locked');
+  ok(A.view.categories.filter((c) => c.tier !== 'pro').every((c) => !c.locked), 'free packs stay open');
+  ok(A.view.pro.active === false && A.view.pro.priceCents === 990 && A.view.pro.period === 'month', 'Pro is $9.90/month and off by default');
+  ok(!('key' in A.view.pro) || A.view.pro.key == null, 'no key leaks while Pro is off');
+  A.errors.length = 0;
+  A.send({ t: 'settings', category: 'Anime' });
+  await A.until(() => A.errors.length > 0, 3000, 'locked pack rejected');
+  ok(/Pro pack/.test(A.errors[0]) && A.view.settings.category !== 'Anime', 'the server refuses a locked pack (no client-side trust)');
+  const lockedStatus = await (await fetch(`${BASE}/api/pro/status?key=${encodeURIComponent(testKey)}`)).json();
+  ok(lockedStatus.active === false, 'unknown key is not active');
+  const noKey = await (await fetch(`${BASE}/api/pro/status?key=nope`)).json();
+  ok(noKey.active === false, 'garbage key is not active');
+
+  group('pro tier — subscription unlocks the packs');
+  grant(testKey, { email: 'e2e@local' });
+  const paidStatus = await (await fetch(`${BASE}/api/pro/status?key=${encodeURIComponent(testKey)}`)).json();
+  ok(paidStatus.active === true && paidStatus.plan.priceCents === 990, 'paid key reports active at $9.90/month');
+  A.send({ t: 'pro', key: testKey });
+  await A.until(() => A.view.pro.active === true, 4000, 'pro activated');
+  ok(A.view.categories.every((c) => !c.locked), 'every pack unlocks for the host');
+  ok(A.view.pro.key === testKey, 'host gets the key back so the device can remember it');
+  ok(B.view.pro.active === true && !B.view.pro.key, 'guests can play Pro packs but never see the key');
+  A.send({ t: 'settings', category: 'Anime' });
+  await A.until(() => A.view.settings.category === 'Anime', 4000, 'pro pack selectable');
+  ok(B.view.settings.category === 'Anime', 'the Pro pack reaches every player');
+  B.errors.length = 0;
+  B.send({ t: 'pro', key: testKey });
+  await B.until(() => B.errors.length > 0, 3000, 'guest cannot claim the key');
+  ok(B.view.pro.key == null, 'a guest redeeming the key does not take over the room\'s Pro');
+
+  group('pro tier — lapsing subscription re-locks the packs');
+  revoke(testKey);
+  A.send({ t: 'settings', mode: 'classic' });
+  await A.until(() => A.view.pro.active === false, 4000, 'pro lapses');
+  ok(A.view.categories.some((c) => c.key === 'Anime' && c.locked), 'packs lock again when the subscription ends');
+  A.send({ t: 'settings', category: 'Anime' });
+  await sleep(200);
+  ok(A.view.settings.category !== 'Anime', 'a cancelled subscription cannot keep using Pro packs');
+  removeKey(testKey);
+
+  group('pro checkout endpoints');
+  const checkout = await fetch(`${BASE}/api/pro/checkout`, { method: 'POST' });
+  const checkoutBody = await checkout.json().catch(() => ({}));
+  if (process.env.STRIPE_SECRET_KEY) {
+    ok(checkout.status === 200 && typeof checkoutBody.url === 'string', 'configured server returns a Stripe checkout url');
+  } else {
+    ok(checkout.status === 503 && checkoutBody.error === 'payments_not_configured', 'unconfigured server says so instead of pretending');
+  }
+  const hook = await fetch(`${BASE}/api/stripe/webhook`, { method: 'POST', headers: { 'stripe-signature': 't=1,v1=deadbeef' }, body: '{}' });
+  ok(hook.status === 400 || hook.status === 503, `unsigned webhook is refused (${hook.status})`);
 
   group('custom word bank');
   const custom = ['witch', 'broom', 'cauldron', 'spell', 'wand', 'potion', 'ghost', 'mirror'];

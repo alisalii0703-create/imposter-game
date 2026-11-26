@@ -4,6 +4,7 @@ import path from 'node:path';
 import crypto from 'node:crypto';
 import os from 'node:os';
 import { WebSocketServer } from 'ws';
+import * as pro from './lib/pro.js';
 
 const __dirname = import.meta.dirname;
 const PUBLIC_DIR = path.join(__dirname, 'public');
@@ -30,8 +31,34 @@ const CATEGORIES = {
   Nature: { difficulty: 'Medium', words: ['rainbow', 'volcano', 'waterfall', 'thunder', 'snowflake', 'tornado', 'sunflower', 'glacier', 'cactus', 'river', 'moon', 'hurricane', 'ocean', 'lightning', 'iceberg', 'forest', 'meadow', 'cliff', 'tide', 'avalanche'] },
   Tech: { difficulty: 'Medium', words: ['laptop', 'keyboard', 'router', 'screen', 'printer', 'battery', 'charger', 'camera', 'microphone', 'speaker', 'software', 'robot', 'satellite', 'drone', 'tablet', 'server', 'cable', 'sensor', 'bluetooth', 'encryption'] },
   Brands: { difficulty: 'Hard', words: ['nike', 'adidas', 'spotify', 'netflix', 'samsung', 'toyota', 'lego', 'ikea', 'starbucks', 'google', 'amazon', 'sony', 'ferrari', 'rolex', 'dell', 'pepsi', 'heinz', 'hershey', 'prada', 'paypal'] },
+
+  // ------------------------------------------------------------ Pro packs
+  // Niche topics
+  Anime: { difficulty: 'Medium', tier: 'pro', words: ['shonen', 'waifu', 'filler arc', 'senpai', 'manga', 'cosplay', 'opening theme', 'tsundere', 'mecha', 'isekai', 'sub vs dub', 'training arc', 'convention', 'final boss', 'side character', 'power level', 'plot twist', 'mascot', 'recap episode', 'studio ghibli'] },
+  Coding: { difficulty: 'Hard', tier: 'pro', words: ['merge conflict', 'git blame', 'stack overflow', 'regex', 'dark mode', 'unit test', 'dependency hell', 'code review', 'tabs vs spaces', 'localhost', 'hotfix', 'docker', 'cache', 'refactor', 'console log', 'api key', 'branch', 'rubber duck', 'tech debt', 'rollback'] },
+  Football: { difficulty: 'Hard', tier: 'pro', words: ['offside', 'penalty shootout', 'transfer window', 'free kick', 'var', 'hat-trick', 'derby', 'red card', 'midfielder', 'own goal', 'stadium chant', 'group stage', 'extra time', 'goalkeeper', 'corner kick', 'golden boot', 'clean sheet', 'relegation', 'bicycle kick', 'away fans'] },
+  'Board Games': { difficulty: 'Medium', tier: 'pro', words: ['monopoly', 'catan', 'jenga', 'scrabble', 'uno', 'dungeons and dragons', 'risk', 'cluedo', 'poker', 'backgammon', 'dominoes', 'snakes and ladders', 'codenames', 'pictionary', 'carcassonne', 'house rules', 'dice', 'meeple', 'cheating', 'rulebook'] },
+  Mythology: { difficulty: 'Medium', tier: 'pro', words: ['zeus', 'medusa', 'thor', 'minotaur', 'hades', 'valhalla', 'sphinx', 'phoenix', 'kraken', 'titan', 'olympus', 'cyclops', 'valkyrie', 'temple', 'oracle', 'pegasus', 'underworld', 'sacrifice', 'prophecy', 'lightning bolt'] },
+  Coffee: { difficulty: 'Medium', tier: 'pro', words: ['espresso', 'latte art', 'cold brew', 'barista', 'flat white', 'decaf', 'aeropress', 'french press', 'crema', 'macchiato', 'oat milk', 'pour over', 'grinder', 'cortado', 'tasting notes', 'chemex', 'single origin', 'third wave', 'burnt', 'milk jug'] },
+  Cocktails: { difficulty: 'Medium', tier: 'pro', words: ['mojito', 'negroni', 'margarita', 'old fashioned', 'aperol spritz', 'daiquiri', 'moscow mule', 'pina colada', 'garnish', 'shaker', 'mocktail', 'hangover', 'happy hour', 'ice cube', 'last call', 'shot glass', 'cocktail umbrella', 'bar tab', 'bitters', 'twist'] },
+  Gaming: { difficulty: 'Easy', tier: 'pro', words: ['speedrun', 'loot box', 'npc', 'boss fight', 'respawn', 'checkpoint', 'easter egg', 'open world', 'lag', 'controller', 'microtransaction', 'tutorial level', 'glitch', 'achievement', 'steam sale', 'clan', 'final save', 'secret ending', 'rage quit', 'difficulty spike'] },
+  Space: { difficulty: 'Medium', tier: 'pro', words: ['black hole', 'rocket launch', 'astronaut', 'satellite', 'mars rover', 'light year', 'orbit', 'space station', 'meteor shower', 'gravity', 'telescope', 'solar flare', 'nebula', 'comet', 'spacewalk', 'mission control', 'vacuum', 're-entry', 'launch pad', 'countdown'] },
+
+  // Fun topics
+  Memes: { difficulty: 'Easy', tier: 'pro', words: ['cursed image', 'rickroll', 'deep fried', 'nobody asked', 'this is fine', 'stonks', 'epic fail', 'copypasta', 'doggo', 'touch grass', 'ratio', 'based', 'ok boomer', 'main character', 'group chat', 'viral', 'screenshot', 'caption', 'fandom', 'algorithm'] },
+  Conspiracies: { difficulty: 'Medium', tier: 'pro', words: ['flat earth', 'area 51', 'bigfoot', 'loch ness', 'moon landing', 'illuminati', 'chemtrails', 'time traveler', 'simulation theory', 'bermuda triangle', 'crop circles', 'lizard people', 'secret bunker', 'mandela effect', 'aliens', 'tinfoil hat', 'classified file', 'eyewitness', 'red string', 'government cover-up'] },
+  'Awkward Moments': { difficulty: 'Easy', tier: 'pro', words: ['holding a door', 'wrong name', 'toast gone wrong', 'reply all', 'dead silence', 'wave at stranger', 'food in teeth', 'mic left on', 'wrong chat', 'loud ringtone', 'tripping upstairs', 'forgotten birthday', 'saying you too', 'split bill', 'elevator small talk', 'laughing alone', 'unread message', 'sweaty handshake', 'mum joke', 'cheek kiss'] },
+  'Reality TV': { difficulty: 'Medium', tier: 'pro', words: ['the villa', 'plot twist', 'coupling', 'recoupling', 'confessional', 'drama', 'villain edit', 'finale', 'bombshell', 'backstab', 'challenge', 'public vote', 'reunion', 'meltdown', 'cheating scandal', 'host', 'couple', 'duvet', 'walkout', 'screen time'] },
+  Horror: { difficulty: 'Easy', tier: 'pro', words: ['haunted house', 'jump scare', 'final girl', 'ghost', 'slasher', 'seance', 'possessed doll', 'creepy basement', 'blood moon', 'vampire', 'zombie', 'curse', 'mirror', 'whisper', 'footsteps', 'fog', 'cursed video', 'three knocks', 'abandoned hospital', 'monster'] },
+  Emojis: { difficulty: 'Medium', tier: 'pro', words: ['skull', 'nails', 'clown', 'ghost', 'shrug', 'pray', 'side eye', 'fire', 'dumpster', 'melting face', 'eggplant', 'eye roll', 'sparkle', 'chefs kiss', 'prayer circle', 'sticker', 'thumbs up', 'crying laugh', 'heart hands', 'blushing'] },
+  'Internet Slang': { difficulty: 'Easy', tier: 'pro', words: ['ghosted', 'doomscrolling', 'lurker', 'simp', 'delulu', 'rizz', 'slay', 'copium', 'sus', 'mid', 'glow up', 'receipts', 'sub tweet', 'rent free', 'brain rot', 'thread', 'dm', 'unfollow', 'spam', 'vibe check'] },
+  'Bad Habits': { difficulty: 'Easy', tier: 'pro', words: ['nail biting', 'snooze button', 'late night snack', 'skipping breakfast', 'unread emails', 'phone in bed', 'junk drawer', 'procrastinating', 'biting pen', 'cracking knuckles', 'drunk texting', 'binge watching', 'impulse buy', 'saving tabs', 'third coffee', 'lying about water', 'hair twirl', 'doom scroll', 'messy desk', 'never flossing'] },
+  'Office Life': { difficulty: 'Easy', tier: 'pro', words: ['reply all', 'stand-up', 'calendar invite', 'meeting that could be an email', 'desk plant', 'coffee run', 'water cooler', 'microwave smell', 'last slice', 'printer jam', 'badge', 'open plan', 'elevator pitch', 'handover', 'zoom background', 'mute button', 'out of office', 'hot desk', 'appraisal', 'mandatory fun'] },
 };
 const CAT_KEYS = Object.keys(CATEGORIES);
+const packTier = (k) => (CATEGORIES[k].tier === 'pro' ? 'pro' : 'free');
+const FREE_KEYS = CAT_KEYS.filter((k) => packTier(k) === 'free');
+const PRO_KEYS = CAT_KEYS.filter((k) => packTier(k) === 'pro');
 const DEFAULT_SETTINGS = {
   category: 'mixed',
   mode: 'mysterious',
@@ -88,10 +115,50 @@ function settingsView(room) {
   };
 }
 
+// ------------------------------------------------------------------- pro tier
+// The host's subscription unlocks the Pro packs for the whole room.
+function roomOwner(room) {
+  return room.solo ? room.device : byId(room, room.hostId);
+}
+function roomPro(room) {
+  return pro.status(room.proKey).active;
+}
+function allowedPacks(room) {
+  const keys = roomPro(room) ? CAT_KEYS : FREE_KEYS;
+  return room.customWords.length >= 5 ? keys.concat('custom') : keys;
+}
+
 function categoryList(room) {
-  const list = CAT_KEYS.map((k) => ({ key: k, difficulty: CATEGORIES[k].difficulty, count: CATEGORIES[k].words.length }));
-  if (room.customWords.length >= 5) list.push({ key: 'custom', difficulty: 'Custom', count: room.customWords.length });
+  const unlocked = roomPro(room);
+  const list = CAT_KEYS.map((k) => ({
+    key: k,
+    difficulty: CATEGORIES[k].difficulty,
+    count: CATEGORIES[k].words.length,
+    tier: packTier(k),
+    locked: packTier(k) === 'pro' && !unlocked,
+  }));
+  if (room.customWords.length >= 5) list.push({ key: 'custom', difficulty: 'Custom', count: room.customWords.length, tier: 'free', locked: false });
   return list;
+}
+
+function setProKey(player, msg) {
+  const key = pro.normalizeKey(msg.key);
+  if (!key) return send(player, { t: 'error', msg: 'That does not look like a Pro key.' });
+  const room = player.room;
+  if (room && !isHost(player)) {
+    return send(player, { t: 'error', msg: 'Only the host can unlock Pro for this room.' });
+  }
+  const state = pro.status(key);
+  if (!state.active) {
+    const why = state.status === 'pending'
+      ? 'That key is still waiting for the payment to clear — try again in a minute.'
+      : 'That Pro key is not active. Check the code or resubscribe.';
+    return send(player, { t: 'error', msg: why });
+  }
+  player.proKey = key;
+  if (room) room.proKey = key;
+  if (room) broadcast(room);
+  else send(player, { t: 'pro', active: true, key });
 }
 
 // --------------------------------------------------------------- game setup
@@ -102,7 +169,7 @@ function wordsFor(room, catKey) {
 
 function chooseCategory(room) {
   const want = room.settings.category;
-  const keys = room.customWords.length >= 5 ? CAT_KEYS.concat('custom') : CAT_KEYS;
+  const keys = allowedPacks(room);
   if (want === 'custom' && room.customWords.length >= 5) return 'custom';
   if (want === 'mixed' || !keys.includes(want)) return pick(keys);
   return want;
@@ -282,6 +349,17 @@ function viewFor(room, subject) {
     categories: categoryList(room),
     modes: MODES,
     limits: { min: MIN_PLAYERS, max: MAX_PLAYERS, soloMax: SOLO_MAX_SEATS },
+    pro: {
+      active: roomPro(room),
+      key: subject && (isHost(subject) || (room.solo && subject === room.device)) ? room.proKey : null,
+      name: pro.PRO.name,
+      blurb: pro.PRO.blurb,
+      priceLabel: pro.PRO.priceLabel,
+      priceCents: pro.PRO.priceCents,
+      period: pro.PRO.period,
+      packs: PRO_KEYS.length,
+      configured: pro.stripeConfigured(),
+    },
     winner: room.winner,
     reason: room.reason,
     yourWord: subject ? subject.word : null,
@@ -318,7 +396,16 @@ function viewFor(room, subject) {
   };
 }
 
+// A selected Pro pack the room can no longer use falls back to Mixed, so a
+// lapsed subscription never leaves a locked pack showing as selected.
+function normalizeCategory(room) {
+  const s = room.settings;
+  if (!PRO_KEYS.includes(s.category)) return;
+  if (!roomPro(room)) s.category = 'mixed';
+}
+
 function broadcast(room) {
+  normalizeCategory(room);
   if (room.solo) {
     send(room.device, viewFor(room, activeSeat(room)));
     return;
@@ -340,11 +427,100 @@ const MIME = {
   '.ico': 'image/x-icon',
 };
 
+// ---------------------------------------------------------------- pro API
+// The public origin used for Stripe redirects. APP_ORIGIN wins when set; the
+// browser's Origin header is safe to echo because it only shapes a redirect.
+function publicOrigin(req) {
+  if (process.env.APP_ORIGIN) return process.env.APP_ORIGIN.replace(/\/$/, '');
+  const origin = req.headers.origin;
+  if (origin && /^https?:\/\/[^\s]+$/.test(origin)) return origin.replace(/\/$/, '');
+  const host = req.headers.host;
+  if (host && /^[a-z0-9.\-:]+$/i.test(host)) return `http://${host}`;
+  return `http://localhost:${PORT}`;
+}
+
+function readBody(req, limit = 1_000_000) {
+  return new Promise((resolve, reject) => {
+    let raw = '';
+    req.on('data', (chunk) => {
+      raw += chunk;
+      if (raw.length > limit) { reject(new Error('body too large')); req.destroy(); }
+    });
+    req.on('end', () => resolve(raw));
+    req.on('error', reject);
+  });
+}
+
+async function handleApi(req, res, url) {
+  const json = (code, body) => {
+    res.writeHead(code, { 'content-type': 'application/json; charset=utf-8', 'cache-control': 'no-store' });
+    res.end(JSON.stringify(body));
+  };
+
+  if (url.pathname === '/api/pro/status' && req.method === 'GET') {
+    let st = pro.status(url.searchParams.get('key'));
+    // Just back from Stripe? Confirm the payment with Stripe directly, so Pro
+    // unlocks even when no webhook endpoint is configured.
+    if (!st.active && (await pro.confirmPending(url.searchParams.get('key')))) {
+      st = pro.status(url.searchParams.get('key'));
+    }
+    return json(200, {
+      active: st.active,
+      status: st.status,
+      until: st.until,
+      plan: pro.PRO,
+      packs: PRO_KEYS.length,
+      configured: pro.stripeConfigured(),
+    });
+  }
+
+  if (url.pathname === '/api/pro/checkout' && req.method === 'POST') {
+    if (!pro.stripeConfigured()) {
+      return json(503, {
+        error: 'payments_not_configured',
+        message: 'Pro checkout is not set up on this server yet.',
+      });
+    }
+    const key = pro.mintKey();
+    try {
+      const session = await pro.createCheckout({ origin: publicOrigin(req), key });
+      pro.addPending(key, { sessionId: session.id });
+      return json(200, { url: session.url, key });
+    } catch (err) {
+      console.error('checkout failed:', err.message);
+      return json(502, { error: 'checkout_failed', message: 'Could not start checkout. Try again.' });
+    }
+  }
+
+  if (url.pathname === '/api/stripe/webhook' && req.method === 'POST') {
+    const secret = process.env.STRIPE_WEBHOOK_SECRET;
+    if (!secret) return json(503, { error: 'webhook_not_configured' });
+    const raw = await readBody(req);
+    if (!pro.verifyStripeSignature(raw, req.headers['stripe-signature'], secret)) {
+      return json(400, { error: 'bad_signature' });
+    }
+    let event = null;
+    try { event = JSON.parse(raw); } catch { return json(400, { error: 'bad_json' }); }
+    try { pro.handleStripeEvent(event); } catch (err) { console.error('webhook apply failed:', err); }
+    return json(200, { received: true });
+  }
+
+  return json(404, { error: 'not_found' });
+}
+
 const server = http.createServer((req, res) => {
   const url = new URL(req.url, 'http://x');
   if (url.pathname === '/healthz') {
     res.writeHead(200, { 'content-type': 'text/plain' });
     return res.end('ok');
+  }
+  if (url.pathname.startsWith('/api/')) {
+    handleApi(req, res, url).catch((err) => {
+      console.error('api error', err);
+      if (!res.headersSent) res.writeHead(500, { 'content-type': 'application/json' });
+      res.end(JSON.stringify({ error: 'server_error' }));
+    });
+    return;
   }
   let rel = decodeURIComponent(url.pathname);
   if (rel === '/') rel = '/index.html';
@@ -410,8 +586,16 @@ function handle(msg, player) {
     case 'transfer': return transfer(player, msg);
     case 'seat': return switchSeat(player, msg);
     case 'leave': return player.isDevice ? dropSoloRoom(player) : removePlayer(player);
+    case 'pro': return setProKey(player, msg);
     case 'ping': return send(player, { t: 'pong' });
   }
+}
+
+// A returning host re-sends their saved key; only an active one is kept.
+function applyProKey(player, room, raw) {
+  if (!pro.status(raw).active) return;
+  player.proKey = pro.normalizeKey(raw);
+  if (room && isHost(player) && !room.proKey) room.proKey = player.proKey;
 }
 
 function cleanName(raw) {
@@ -440,6 +624,7 @@ function newRoom(host) {
     settings: { ...DEFAULT_SETTINGS },
     customWords: [],
     chat: [],
+    proKey: null,
     winner: null,
     reason: null,
     round: null,
@@ -469,6 +654,7 @@ function createRoom(player, msg) {
   player.room = room;
   player.name = uniqueName(room, cleanName(msg.name));
   player.connected = true;
+  applyProKey(player, room, msg.proKey);
   send(player, { t: 'you', id: player.id, code: room.code });
   broadcast(room);
 }
@@ -496,6 +682,7 @@ function joinRoom(player, msg) {
     room.players = room.players.filter((p) => p !== existing).concat(player);
     player.room = room;
     player.connected = true;
+    applyProKey(player, room, msg.proKey);
     send(player, { t: 'you', id: player.id, code });
     broadcast(room);
     return;
@@ -512,6 +699,7 @@ function joinRoom(player, msg) {
   player.room = room;
   player.name = uniqueName(room, cleanName(msg.name));
   player.connected = true;
+  applyProKey(player, room, msg.proKey);
   room.players.push(player);
   pushChat(room, null, `${player.name} joined the room`);
   send(player, { t: 'you', id: player.id, code });
@@ -532,7 +720,12 @@ function updateSettings(player, msg) {
   if (MODES.includes(msg.mode)) s.mode = msg.mode;
   if (msg.category === 'custom') {
     if (room.customWords.length >= 5) s.category = 'custom';
-  } else if (msg.category === 'mixed' || CAT_KEYS.includes(msg.category)) s.category = msg.category;
+  } else if (msg.category === 'mixed' || FREE_KEYS.includes(msg.category)) {
+    s.category = msg.category;
+  } else if (PRO_KEYS.includes(msg.category)) {
+    if (!roomPro(room)) return send(player, { t: 'error', msg: `“${msg.category}” is a Pro pack — unlock Pro to play it.` });
+    s.category = msg.category;
+  }
   if (['auto', 1, 2, 3].includes(msg.impostors) || ['1', '2', '3'].includes(String(msg.impostors))) {
     s.impostors = msg.impostors === 'auto' ? 'auto' : Math.max(1, Math.min(3, Number(msg.impostors)));
   }

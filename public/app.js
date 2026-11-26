@@ -7,12 +7,16 @@
   let ws = null;
   let view = null;
   let me = load('imposter.me');
+  let proKey = localStorage.getItem('imposter.pro') || '';
+  let proBusy = false; // checkout request in flight
+  let proWatch = null; // poll after returning from Stripe
   let draft = {
     name: (me && me.name) || '',
     code: (me && me.code) || '',
     chat: '',
     custom: '',
     seats: '',
+    prokey: '',
     mode: null, // home setup choice: null | 'multi' | 'same'
   };
   let pendingSeats = null; // same-phone names to save once the solo room exists
@@ -52,6 +56,48 @@
   function saveMe() {
     if (me) localStorage.setItem('imposter.me', JSON.stringify(me));
     else localStorage.removeItem('imposter.me');
+  }
+  function saveProKey(k) {
+    proKey = k ? String(k).toUpperCase() : '';
+    if (proKey) localStorage.setItem('imposter.pro', proKey);
+    else localStorage.removeItem('imposter.pro');
+  }
+
+  // Poll /api/pro/status until Stripe's webhook flips the key to active.
+  async function watchPro(key, tries = 0) {
+    clearTimeout(proWatch);
+    let st = null;
+    try {
+      const r = await fetch(`/api/pro/status?key=${encodeURIComponent(key)}`);
+      st = await r.json();
+    } catch { return; } // offline: the key stays saved and re-sends later
+    if (st.active) {
+      saveProKey(st.key || key);
+      send({ t: 'pro', key: st.key || key });
+      toast('Pro unlocked 🎉 Every pack is open.');
+      render(true);
+      return;
+    }
+    if (st.status === 'pending' && tries < 20) {
+      if (!tries) toast('Payment received — activating Pro…');
+      proWatch = setTimeout(() => watchPro(key, tries + 1), 3000);
+      return;
+    }
+    if (st.status === 'invalid' || st.status === 'unknown' || st.status === 'expired') {
+      saveProKey('');
+      toast('That Pro key is not active.');
+      render(true);
+    }
+  }
+
+  // Coming back from Stripe: /?pro=IMP-…
+  function proFromUrl() {
+    const raw = new URLSearchParams(location.search).get('pro');
+    if (!raw) return;
+    history.replaceState(null, '', location.pathname);
+    if (raw === 'cancel') return toast('Checkout cancelled — no charge.');
+    saveProKey(raw);
+    watchPro(raw);
   }
   function esc(s) {
     return String(s == null ? '' : s).replace(/[&<>"']/g, (c) => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;', "'": '&#39;' }[c]));
@@ -131,8 +177,10 @@
       offlineEl.classList.add('hidden');
       if (me && me.code) {
         pendingResume = true;
-        send({ t: 'join', code: me.code, name: me.name, resume: me.id });
+        send({ t: 'join', code: me.code, name: me.name, resume: me.id, proKey: proKey || undefined });
       }
+      // re-assert the host's Pro state after a reconnect
+      if (proKey && view && view.isHost) send({ t: 'pro', key: proKey });
       render(true);
     };
     sock.onmessage = (e) => {
@@ -180,6 +228,7 @@
     if (m.t === 'room') {
       pendingResume = false;
       view = m;
+      if (m.pro && m.pro.key) saveProKey(m.pro.key);
       // one-tap same-phone start: the room was just created, save the seats
       if (pendingSeats && m.solo && m.phase === 'lobby' && !m.players.length) {
         const names = pendingSeats;
@@ -201,6 +250,11 @@
         if (m.phase === 'end') confetti();
       }
       render();
+      return;
+    }
+    if (m.t === 'pro') {
+      saveProKey(m.key);
+      render(true);
       return;
     }
     if (m.t === 'error') {
@@ -362,9 +416,36 @@
       <button type="button" class="ghost block" data-act="mode" data-arg="">← Different setup</button>`;
   }
 
+  function proBlock() {
+    const p = view.pro || {};
+    const lockedCount = view.categories.filter((c) => c.locked).length;
+    const price = esc(p.priceLabel || '$9.90');
+    if (p.active) {
+      return `<div class="card probanner">
+        <div class="prohead"><span class="probadge">PRO</span> <b>Pro is active</b></div>
+        <p class="muted" style="margin:6px 0 0">All ${p.packs || 0} extra packs are unlocked for this room. Thanks for supporting the game 💙</p>
+      </div>`;
+    }
+    return `<div class="card upsell" data-pro>
+      <div class="prohead"><span class="probadge">PRO</span> <b>${price}/${esc(p.period || 'month')}</b></div>
+      <p class="muted" style="margin:6px 0 10px">Unlock ${p.packs || 0} extra packs: niche topics like <b>Anime</b>, <b>Coding</b> and <b>Football</b>, plus silly ones like <b>Memes</b>, <b>Conspiracies</b> and <b>Awkward Moments</b>.</p>
+      ${lockedCount ? `<p class="muted" style="margin:0 0 10px">${lockedCount} packs are locked in this room right now.</p>` : ''}
+      <button type="button" class="primary block" data-act="subscribe" ${proBusy ? 'disabled' : ''}>${proBusy ? 'Opening checkout…' : `Get Pro — ${price}/month`}</button>
+      <details style="margin-top:12px">
+        <summary style="cursor:pointer;font-weight:700">I already subscribed</summary>
+        <label for="proIn">Your Pro key</label>
+        <input id="proIn" type="text" data-k="prokey" maxlength="19" autocapitalize="characters" placeholder="IMP-XXXX-XXXX-XXXX" value="${esc(draft.prokey)}" />
+        <div class="spacer"></div>
+        <button type="button" class="ghost block" data-act="prokey">Activate key</button>
+        <p class="muted" style="margin:8px 0 0">The key is on your Stripe receipt. It stays on this device.</p>
+      </details>
+      ${p.configured === false ? '<p class="muted" style="margin:10px 0 0">Checkout is not configured on this server yet — use a Pro key above, or set the Stripe keys.</p>' : ''}
+    </div>`;
+  }
+
   function settingsPanel() {
     const s = view.settings;
-    const cats = [{ key: 'mixed', difficulty: 'Mixed', count: 0 }].concat(view.categories);
+    const cats = [{ key: 'mixed', difficulty: 'Mixed', count: 0, tier: 'free', locked: false }].concat(view.categories);
     return `
       <div class="card">
         <h3>Game mode</h3>
@@ -372,8 +453,8 @@
         <p class="muted" style="margin:8px 0 0">${MODE_INFO[s.mode] || ''}</p>
         <h3>Category</h3>
         <div class="picker" role="group">
-          ${cats.map((c) => `<button type="button" class="${s.category === c.key ? 'on' : ''}" data-act="set" data-key="category" data-arg="${c.key}">
-            ${c.key === 'mixed' ? '🎲 Mixed' : esc(c.key)} <span class="catmeta">${c.key === 'mixed' ? '' : `${esc(c.difficulty)} · ${c.count}`}</span></button>`).join('')}
+          ${cats.map((c) => `<button type="button" class="${s.category === c.key ? 'on' : ''}${c.locked ? ' locked' : ''}" data-act="${c.locked ? 'paywall' : 'set'}" data-key="category" data-arg="${c.key}">
+            ${c.key === 'mixed' ? '🎲 Mixed' : esc(c.key)} <span class="catmeta">${c.locked ? '🔒 PRO' : c.key === 'mixed' ? '' : `${esc(c.difficulty)} · ${c.count}`}</span></button>`).join('')}
         </div>
         <details ${draft.custom ? 'open' : ''}>
           <summary style="cursor:pointer;font-weight:700;margin:10px 0">✏️ Custom word list</summary>
@@ -388,7 +469,8 @@
         ${chips([{ v: 'on', l: s.lastGuess ? 'On ✓' : 'On' }, { v: 'off', l: !s.lastGuess ? 'Off ✓' : 'Off' }], s.lastGuess ? 'on' : 'off', 'set', 'lastGuess')}
         <h3>Room size</h3>
         ${chips([{ v: 6, l: '6' }, { v: 12, l: '12' }, { v: 20, l: '20' }], s.maxPlayers, 'set', 'maxPlayers')}
-      </div>`;
+      </div>
+      ${proBlock()}`;
   }
 
   function playerList(interactive) {
@@ -749,7 +831,7 @@
         const name = readInput('name').trim();
         if (!name) return toast('Enter your name first.');
         draft.name = name;
-        send({ t: 'create', name });
+        send({ t: 'create', name, proKey: proKey || undefined });
         break;
       }
       case 'join': {
@@ -759,7 +841,7 @@
         if (code.length !== 4) return toast('Room codes are 4 characters.');
         draft.name = name;
         draft.code = code;
-        send({ t: 'join', code, name });
+        send({ t: 'join', code, name, proKey: proKey || undefined });
         break;
       }
       case 'mode':
@@ -772,7 +854,7 @@
         if (names.length < 3) return toast('Add at least 3 players.');
         pendingSeats = names;
         render(true);
-        send({ t: 'create', name: names[0], solo: true });
+        send({ t: 'create', name: names[0], solo: true, proKey: proKey || undefined });
         break;
       }
       case 'clearseat':
@@ -804,6 +886,35 @@
         else toast('Nobody else to transfer to.');
         break;
       }
+      case 'paywall': {
+        toast('That pack is part of Pro 👇');
+        const el = app.querySelector('[data-pro]');
+        if (el) el.scrollIntoView({ behavior: 'smooth', block: 'center' });
+        break;
+      }
+      case 'subscribe': {
+        if (proBusy) return toast('Opening checkout…');
+        proBusy = true;
+        render(true);
+        fetch('/api/pro/checkout', { method: 'POST', headers: { 'content-type': 'application/json' }, body: '{}' })
+          .then(async (r) => {
+            const data = await r.json().catch(() => ({}));
+            if (!r.ok || !data.url) throw new Error(data.message || 'Checkout is not available right now.');
+            if (data.key) saveProKey(data.key);
+            location.href = data.url;
+          })
+          .catch((err) => toast(err.message))
+          .finally(() => { proBusy = false; render(true); });
+        break;
+      }
+      case 'prokey': {
+        const k = readInput('prokey').trim().toUpperCase();
+        if (!k) return toast('Enter the key from your receipt.');
+        saveProKey(k);
+        send({ t: 'pro', key: k });
+        watchPro(k);
+        break;
+      }
       case 'copy': {
         const text = `Join my IMPOSTER game! Open ${view.joinUrl || location.host} and enter code ${view.code}`;
         if (navigator.clipboard) navigator.clipboard.writeText(text).catch(() => {});
@@ -824,6 +935,7 @@
     navigator.serviceWorker.register('/sw.js').catch(() => {});
   }
 
+  proFromUrl();
   render(true);
   connect();
 })();

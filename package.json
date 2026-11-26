@@ -5,8 +5,11 @@
   "type": "module",
   "description": "Multiplayer impostor word party game",
   "scripts": {
-    "start": "node server.js",
-    "test": "node test/e2e.mjs"
+    "start": "node --env-file-if-exists=.env server.js",
+    "test": "node test/e2e.mjs",
+    "stripe:setup": "node --env-file-if-exists=.env scripts/stripe-setup.mjs",
+    "stripe:check": "node --env-file-if-exists=.env scripts/stripe-check.mjs",
+    "pro:key": "node --env-file-if-exists=.env scripts/pro-key.mjs"
   },
   "dependencies": {
     "ws": "^8.19.2"

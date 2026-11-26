@@ -1,0 +1,26 @@
+# One-click deploy on Render (https://render.com) — gives you a permanent HTTPS URL.
+# Dashboard → New → Blueprint → point it at this repo. Then paste the secrets in.
+services:
+  - type: web
+    name: imposter-game
+    runtime: docker
+    plan: starter # a disk requires a paid instance type
+    dockerfilePath: ./Dockerfile
+    healthCheckPath: /healthz
+    autoDeploy: true
+    envVars:
+      - key: PORT
+        value: 8080
+      # Set this to the URL Render gives you, e.g. https://imposter-game.onrender.com
+      - key: APP_ORIGIN
+        sync: false
+      - key: STRIPE_SECRET_KEY
+        sync: false
+      - key: STRIPE_PRICE_ID
+        sync: false
+      - key: STRIPE_WEBHOOK_SECRET
+        sync: false
+    disk:
+      name: pro-data
+      mountPath: /app/data
+      sizeGB: 1

@@ -435,7 +435,11 @@ function publicOrigin(req) {
   const origin = req.headers.origin;
   if (origin && /^https?:\/\/[^\s]+$/.test(origin)) return origin.replace(/\/$/, '');
   const host = req.headers.host;
-  if (host && /^[a-z0-9.\-:]+$/i.test(host)) return `http://${host}`;
+  if (host && /^[a-z0-9.\-:]+$/i.test(host)) {
+    // Hosts like Render terminate TLS in front of us, so the socket is plain http.
+    const proto = String(req.headers['x-forwarded-proto'] || '').split(',')[0].trim();
+    return `${proto === 'https' ? 'https' : 'http'}://${host}`;
+  }
   return `http://localhost:${PORT}`;
 }
 
